@@ -9,6 +9,7 @@ class CourseController extends Controller
 {
     public function create(Request $request)
     {
+        $tenantId = $this->tenantId($request);
         $this->validate($request, [
             'title' => 'required|string',
             'description' => 'required|string',
@@ -16,7 +17,7 @@ class CourseController extends Controller
             'language' => 'required|string',
         ]);
 
-        $course = Courses::create([
+        $courseData = [
             'title' => $request->input('title'),
             'description' => $request->input('description'),
             'level' => $request->input('level'),
@@ -25,7 +26,11 @@ class CourseController extends Controller
             'durationHours' => $request->input('durationHours'),
             'tags' => $request->input('tags'),
             'published' => false,
-        ]);
+        ];
+        if ($tenantId !== null) {
+            $courseData['tenant_id'] = $tenantId;
+        }
+        $course = Courses::create($courseData);
 
         return response()->json($course, 201, [
             'Location' => '/api/course/' . $course->id
@@ -34,6 +39,7 @@ class CourseController extends Controller
 
     public function list(Request $request)
     {
+        $tenantId = $this->tenantId($request);
         $page = (int) $request->input('page', 0);
         $size = (int) $request->input('size', 10);
         $q = $request->input('q', '');
@@ -41,6 +47,9 @@ class CourseController extends Controller
         $language = $request->input('language', '');
 
         $query = Courses::query();
+        if ($tenantId !== null) {
+            $query->where('tenant_id', $tenantId);
+        }
 
         if (trim($q) !== '') {
             $query->where('title', 'like', '%' . $q . '%');
@@ -60,9 +69,12 @@ class CourseController extends Controller
         return response()->json($this->formatPage($items, $total, $page, $size));
     }
 
-    public function get($id)
+    public function get(Request $request, $id)
     {
-        $course = Courses::find($id);
+        $query = Courses::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $course = $query->first();
         if (!$course) {
             return response()->json(null, 404);
         }
@@ -71,7 +83,10 @@ class CourseController extends Controller
 
     public function update(Request $request, $id)
     {
-        $course = Courses::find($id);
+        $query = Courses::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $course = $query->first();
         if (!$course) {
             return response()->json(null, 404);
         }
@@ -99,9 +114,12 @@ class CourseController extends Controller
         return response()->json($course);
     }
 
-    public function delete($id)
+    public function delete(Request $request, $id)
     {
-        $course = Courses::find($id);
+        $query = Courses::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $course = $query->first();
         if (!$course) {
             return response()->json(null, 404);
         }

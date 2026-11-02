@@ -18,6 +18,7 @@ class Students extends Model
         'password',
         'full_name',
         'phone',
+        'tenant_id',
     ];
 
     /**

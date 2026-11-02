@@ -9,6 +9,7 @@ class StudentsController extends Controller
 {
     public function create(Request $request)
     {
+        $tenantId = $this->tenantId($request);
         $this->validate($request, [
             'full_name' => 'required|string',
             'phone' => 'required|string',
@@ -17,30 +18,40 @@ class StudentsController extends Controller
         ]);
 
         $email = $request->input('email');
-        if (Students::where('email', $email)->exists()) {
+        $existingQuery = Students::where('email', $email);
+        if ($tenantId !== null) $existingQuery->where('tenant_id', $tenantId);
+        if ($existingQuery->exists()) {
             return response("Email already exists", 409);
         }
 
-        $student = Students::create([
+        $studentData = [
             'full_name' => $request->input('full_name'),
             'phone' => $request->input('phone'),
             'email' => $email,
-            'password' => hash('sha256', $request->input('password')),
-        ]);
+            'password' => password_hash($request->input('password'), PASSWORD_DEFAULT),
+        ];
+        if ($tenantId !== null) $studentData['tenant_id'] = $tenantId;
+        $student = Students::create($studentData);
 
         return response()->json($student, 201, [
             'Location' => '/api/students/' . $student->id
         ]);
     }
 
-    public function all()
+    public function all(Request $request)
     {
-        return response()->json(Students::all());
+        $query = Students::query();
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        return response()->json($query->get());
     }
 
-    public function byId($id)
+    public function byId(Request $request, $id)
     {
-        $student = Students::find($id);
+        $query = Students::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $student = $query->first();
         if (!$student) {
             return response()->json(null, 404);
         }
@@ -54,7 +65,10 @@ class StudentsController extends Controller
             return response()->json(null, 404);
         }
 
-        $student = Students::where('email', $email)->first();
+        $query = Students::where('email', $email);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $student = $query->first();
         if (!$student) {
             return response()->json(null, 404);
         }

@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Scourses;
+use App\Models\Students;
+use App\Models\Courses;
 use Illuminate\Http\Request;
 
 class ScoursesController extends Controller
 {
     public function create(Request $request)
     {
+        $tenantId = $this->tenantId($request);
         $this->validate($request, [
             'studentId' => 'required|string',
             'contents' => 'required|array',
@@ -16,6 +19,10 @@ class ScoursesController extends Controller
 
         $studentId = $request->input('studentId');
         $contents = $request->input('contents');
+
+        if ($tenantId !== null && !Students::where('id', $studentId)->where('tenant_id', $tenantId)->exists()) {
+            return response()->json(['message' => 'Student not found.'], 404);
+        }
 
         $courseIds = [];
         $incoming = [];
@@ -34,6 +41,10 @@ class ScoursesController extends Controller
 
         if (empty($courseIds)) {
             return response("contents must include at least one courseId", 400);
+        }
+
+        if ($tenantId !== null && Courses::whereIn('id', $courseIds)->where('tenant_id', $tenantId)->count() !== count(array_unique($courseIds))) {
+            return response()->json(['message' => 'One or more courses are not available in this organization.'], 404);
         }
 
         // Fetch existing doc or initialize new one
@@ -82,14 +93,23 @@ class ScoursesController extends Controller
         return response()->json($scourse);
     }
 
-    public function all()
+    public function all(Request $request)
     {
-        return response()->json(Scourses::all());
+        $query = Scourses::query();
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->whereIn('studentId', Students::select('id')->where('tenant_id', $tenantId));
+        return response()->json($query->get());
     }
 
-    public function byStudentId($studentId)
+    public function byStudentId(Request $request, $studentId)
     {
-        $scourse = Scourses::where('studentId', $studentId)->first();
+        $query = Scourses::where('studentId', $studentId);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) {
+            if (!Students::where('id', $studentId)->where('tenant_id', $tenantId)->exists()) return response()->json(null, 404);
+            $query->whereIn('studentId', Students::select('id')->where('tenant_id', $tenantId));
+        }
+        $scourse = $query->first();
         if (!$scourse) {
             return response()->json(null, 404);
         }

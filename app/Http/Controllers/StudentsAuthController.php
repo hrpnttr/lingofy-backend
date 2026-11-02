@@ -25,17 +25,26 @@ class StudentsAuthController extends Controller
         $email = $request->input('email');
         $password = $request->input('password');
 
-        $student = Students::where('email', $email)->first();
+        $tenantId = $this->tenantId($request);
+        $studentQuery = Students::where('email', $email);
+        if ($tenantId !== null) $studentQuery->where('tenant_id', $tenantId);
+        $student = $studentQuery->first();
         if (!$student) {
             return response()->json(['error' => 'Invalid email or password'], 401);
         }
 
-        $hashedInput = hash('sha256', $password);
-        if (strcasecmp($hashedInput, $student->password) !== 0) {
+        $passwordIsModernHash = password_verify($password, $student->password);
+        $passwordIsLegacyHash = hash_equals(strtolower($student->password), hash('sha256', $password));
+        if (!$passwordIsModernHash && !$passwordIsLegacyHash) {
             return response()->json(['error' => 'Invalid email or password'], 401);
         }
 
-        $token = $this->jwt->generate($student->id, $student->email, $student->full_name);
+        if (!$passwordIsModernHash) {
+            $student->password = password_hash($password, PASSWORD_DEFAULT);
+            $student->save();
+        }
+
+        $token = $this->jwt->generate($student->id, $student->email, $student->full_name, $tenantId);
 
         $userView = [
             'id' => $student->id,
@@ -64,7 +73,11 @@ class StudentsAuthController extends Controller
             $token = $matches[1];
             $payload = $this->jwt->parse($token);
             if ($payload && isset($payload['sub'])) {
-                $student = Students::find($payload['sub']);
+                $tenantId = $this->tenantId($request);
+                $studentQuery = Students::where('id', $payload['sub']);
+                if ($tenantId !== null) $studentQuery->where('tenant_id', $tenantId);
+                if (!empty($payload['tenant_id'])) $studentQuery->where('tenant_id', $payload['tenant_id']);
+                $student = $studentQuery->first();
                 if ($student) {
                     return response()->json([
                         'id' => $student->id,

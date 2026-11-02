@@ -3,17 +3,22 @@
 namespace App\Http\Controllers;
 
 use App\Models\Classes;
+use App\Models\Courses;
 use Illuminate\Http\Request;
 
 class ClassesController extends Controller
 {
     public function list(Request $request)
     {
+        $tenantId = $this->tenantId($request);
         $page = (int) $request->input('page', 0);
         $size = (int) $request->input('size', 10);
         $q = $request->input('q', '');
 
         $query = Classes::query();
+        if ($tenantId !== null) {
+            $query->whereIn('course_id', Courses::select('id')->where('tenant_id', $tenantId));
+        }
 
         if (trim($q) !== '') {
             $query->where('class_name', 'like', '%' . $q . '%');
@@ -27,9 +32,12 @@ class ClassesController extends Controller
         return response()->json($this->formatPage($items, $total, $page, $size));
     }
 
-    public function get($id)
+    public function get(Request $request, $id)
     {
-        $class = Classes::find($id);
+        $query = Classes::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->whereIn('course_id', Courses::select('id')->where('tenant_id', $tenantId));
+        $class = $query->first();
         if (!$class) {
             return response()->json(null, 404);
         }

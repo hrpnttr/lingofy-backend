@@ -22,6 +22,7 @@ class Courses extends Model
         'durationHours',
         'tags',
         'published',
+        'tenant_id',
     ];
 
     /**

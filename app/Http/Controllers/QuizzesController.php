@@ -9,11 +9,13 @@ class QuizzesController extends Controller
 {
     public function list(Request $request)
     {
+        $tenantId = $this->tenantId($request);
         $page = (int) $request->input('page', 0);
         $size = (int) $request->input('size', 10);
         $q = $request->input('q', '');
 
         $query = Quizzes::query();
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
 
         if (trim($q) !== '') {
             $query->where('title', 'like', '%' . $q . '%');
@@ -38,7 +40,10 @@ class QuizzesController extends Controller
             return response("'id' must be a numeric value", 400);
         }
 
-        $quiz = Quizzes::find($id);
+        $quizQuery = Quizzes::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $quizQuery->where('tenant_id', $tenantId);
+        $quiz = $quizQuery->first();
         if (!$quiz) {
             return response()->json(null, 404);
         }
@@ -46,9 +51,12 @@ class QuizzesController extends Controller
         return response()->json($quiz);
     }
 
-    public function get($id)
+    public function get(Request $request, $id)
     {
-        $quiz = Quizzes::find($id);
+        $query = Quizzes::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $quiz = $query->first();
         if (!$quiz) {
             return response()->json(null, 404);
         }

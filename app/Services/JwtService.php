@@ -16,7 +16,7 @@ class JwtService
     /**
      * Generate a JWT token for the student.
      */
-    public function generate($subject, $email, $fullName)
+    public function generate($subject, $email, $fullName, $tenantId = null)
     {
         $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
         
@@ -27,6 +27,8 @@ class JwtService
             'sub' => $subject,
             'email' => $email,
             'name' => $fullName,
+            'tenant_id' => $tenantId,
+            'type' => 'student',
             'iat' => $now,
             'exp' => $exp
         ]);

@@ -14,7 +14,10 @@ class PasswordResetController extends Controller
         ]);
 
         $email = $request->input('email');
-        $student = Students::where('email', $email)->first();
+        $query = Students::where('email', $email);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $student = $query->first();
         if (!$student) {
             return response()->json(null, 404);
         }
@@ -30,12 +33,15 @@ class PasswordResetController extends Controller
         ]);
 
         $email = $request->input('email');
-        $student = Students::where('email', $email)->first();
+        $query = Students::where('email', $email);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $student = $query->first();
         if (!$student) {
             return response()->json(['error' => 'Email not found'], 404);
         }
 
-        $student->password = hash('sha256', $request->input('password'));
+        $student->password = password_hash($request->input('password'), PASSWORD_DEFAULT);
         $student->save();
 
         return response()->json($student);

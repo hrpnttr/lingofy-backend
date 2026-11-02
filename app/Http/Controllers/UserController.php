@@ -9,6 +9,7 @@ class UserController extends Controller
 {
     public function create(Request $request)
     {
+        $tenantId = $this->tenantId($request);
         $this->validate($request, [
             'email' => 'required|email',
             'name' => 'required|string',
@@ -16,29 +17,39 @@ class UserController extends Controller
         ]);
 
         $email = $request->input('email');
-        if (User::where('email', $email)->exists()) {
+        $existingQuery = User::where('email', $email);
+        if ($tenantId !== null) $existingQuery->where('tenant_id', $tenantId);
+        if ($existingQuery->exists()) {
             return response("Email already exists", 409);
         }
 
-        $user = User::create([
+        $userData = [
             'email' => $email,
             'name' => $request->input('name'),
             'level' => $request->input('level'),
-        ]);
+        ];
+        if ($tenantId !== null) $userData['tenant_id'] = $tenantId;
+        $user = User::create($userData);
 
         return response()->json($user, 201, [
             'Location' => '/api/users/' . $user->id
         ]);
     }
 
-    public function all()
+    public function all(Request $request)
     {
-        return response()->json(User::all());
+        $query = User::query();
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        return response()->json($query->get());
     }
 
-    public function byId($id)
+    public function byId(Request $request, $id)
     {
-        $user = User::find($id);
+        $query = User::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $user = $query->first();
         if (!$user) {
             return response()->json(null, 404);
         }
@@ -48,7 +59,10 @@ class UserController extends Controller
     public function byEmail(Request $request)
     {
         $email = $request->query('email');
-        $user = User::where('email', $email)->first();
+        $query = User::where('email', $email);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $user = $query->first();
         if (!$user) {
             return response()->json(null, 404);
         }
@@ -57,7 +71,10 @@ class UserController extends Controller
 
     public function update(Request $request, $id)
     {
-        $user = User::find($id);
+        $query = User::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $user = $query->first();
         if (!$user) {
             return response()->json(null, 404);
         }
@@ -77,9 +94,12 @@ class UserController extends Controller
         return response()->json($user);
     }
 
-    public function delete($id)
+    public function delete(Request $request, $id)
     {
-        $user = User::find($id);
+        $query = User::where('id', $id);
+        $tenantId = $this->tenantId($request);
+        if ($tenantId !== null) $query->where('tenant_id', $tenantId);
+        $user = $query->first();
         if (!$user) {
             return response()->json(null, 404);
         }

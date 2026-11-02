@@ -19,6 +19,7 @@ class Quizzes extends Model
         'description',
         'type',
         'contens',
+        'tenant_id',
     ];
 
     /**
