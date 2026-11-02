@@ -1,5 +1,19 @@
 # Lumen PHP Framework
 
+## Deploying the API on Vercel
+
+This Lumen API needs a PHP server; a static Vite deployment only returns Vercel `NOT_FOUND` for its `/api/*` routes. `Dockerfile.vercel`, `Caddyfile`, and `vercel.json` configure the app to run in Vercel's container runtime.
+
+Set these Vercel environment variables before deploying:
+
+- `APP_KEY` — a stable Laravel-compatible key.
+- `DB_CONNECTION=mysql`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` — credentials for the existing MySQL database. The database host must be reachable from Vercel; `127.0.0.1` refers to the container.
+- `JWT_SECRET` — a strong, stable secret used to sign student access tokens.
+- `JWT_EXPIRATION_MS` — token lifetime in milliseconds, for example `3600000`.
+- `APP_URL` — the deployed API URL.
+
+After deploying the API, set the student frontend's `BACKEND_API_URL` to its public base URL ending in `/api`, for example `https://<api-domain>/api`.
+
 [![Build Status](https://travis-ci.org/laravel/lumen-framework.svg)](https://travis-ci.org/laravel/lumen-framework)
 [![Total Downloads](https://img.shields.io/packagist/dt/laravel/lumen-framework)](https://packagist.org/packages/laravel/lumen-framework)
 [![Latest Stable Version](https://img.shields.io/packagist/v/laravel/lumen-framework)](https://packagist.org/packages/laravel/lumen-framework)
