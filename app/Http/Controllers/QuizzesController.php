@@ -14,7 +14,7 @@ class QuizzesController extends Controller
         $size = (int) $request->input('size', 10);
         $q = $request->input('q', '');
 
-        $query = Quizzes::query();
+        $query = Quizzes::active();
         if ($tenantId !== null) $query->where('tenant_id', $tenantId);
 
         if (trim($q) !== '') {
@@ -40,7 +40,7 @@ class QuizzesController extends Controller
             return response("'id' must be a numeric value", 400);
         }
 
-        $quizQuery = Quizzes::where('id', $id);
+        $quizQuery = Quizzes::active()->where('id', $id);
         $tenantId = $this->tenantId($request);
         if ($tenantId !== null) $quizQuery->where('tenant_id', $tenantId);
         $quiz = $quizQuery->first();
@@ -53,7 +53,7 @@ class QuizzesController extends Controller
 
     public function get(Request $request, $id)
     {
-        $query = Quizzes::where('id', $id);
+        $query = Quizzes::active()->where('id', $id);
         $tenantId = $this->tenantId($request);
         if ($tenantId !== null) $query->where('tenant_id', $tenantId);
         $quiz = $query->first();

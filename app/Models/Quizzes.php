@@ -29,9 +29,18 @@ class Quizzes extends Model
      */
     protected $casts = [
         'contens' => 'array',
+        'is_active' => 'boolean',
         'createdAt' => 'datetime',
         'updatedAt' => 'datetime',
     ];
+
+    /**
+     * Only quizzes an admin has left active are visible to students.
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
 
     public $timestamps = true;
     const CREATED_AT = 'createdAt';

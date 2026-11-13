@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\QuizzResult;
 use App\Models\Students;
 use App\Models\Quizzes;
+use App\Support\QuizScorer;
 use Illuminate\Http\Request;
 
 class QuizResultController extends Controller
@@ -39,6 +40,10 @@ class QuizResultController extends Controller
 
     public function create(Request $request)
     {
+        if ($request->has('responses')) {
+            return $this->createScored($request);
+        }
+
         $tenantId = $this->tenantId($request);
         $this->validate($request, [
             'studentId' => 'required|string',
@@ -56,6 +61,9 @@ class QuizResultController extends Controller
                 return response()->json(['message' => 'Student or quiz not found in this organization.'], 404);
             }
         }
+        if (!Quizzes::active()->where('id', $request->input('quiz_id'))->exists()) {
+            return response()->json(['message' => 'This quiz is not available.'], 404);
+        }
         $mappedAnswers = [];
         foreach ($answers as $ans) {
             $mappedAnswers[] = [
@@ -72,6 +80,65 @@ class QuizResultController extends Controller
         ]);
 
         return response()->json($result, 201, [
+            'Location' => '/api/quizzes/' . $result->id
+        ]);
+    }
+
+    /**
+     * Server-scored submission: the client sends raw responses only; correctness
+     * and points are computed here from the stored quiz.
+     */
+    private function createScored(Request $request)
+    {
+        $tenantId = $this->tenantId($request);
+        $this->validate($request, [
+            'studentId' => 'required|string',
+            'quiz_id' => 'required|string',
+            'responses' => 'present|array',
+        ]);
+
+        $studentId = $request->input('studentId');
+        $quizId = $request->input('quiz_id');
+
+        $quizQuery = Quizzes::active()->where('id', $quizId);
+        if ($tenantId !== null) {
+            $quizQuery->where('tenant_id', $tenantId);
+            if (!Students::where('id', $studentId)->where('tenant_id', $tenantId)->exists()) {
+                return response()->json(['message' => 'Student or quiz not found in this organization.'], 404);
+            }
+        }
+        $quiz = $quizQuery->first();
+        if (!$quiz) {
+            return response()->json(['message' => 'Student or quiz not found in this organization.'], 404);
+        }
+
+        $questions = is_array($quiz->contens) ? array_values($quiz->contens) : [];
+        if (count($questions) === 0) {
+            return response()->json(['message' => 'This quiz has no questions.'], 422);
+        }
+
+        [$errors, $values] = QuizScorer::validate($questions, $request->input('responses'));
+        if ($errors) {
+            return response()->json([
+                'message' => reset($errors),
+                'errors' => array_map(fn ($m) => [$m], $errors),
+            ], 422);
+        }
+
+        $scored = QuizScorer::score($questions, $values);
+
+        $result = QuizzResult::create([
+            'studentId' => $studentId,
+            'quiz_id' => $quizId,
+            'answers' => $scored['answers'],
+            'score' => $scored['score'],
+        ]);
+
+        return response()->json(array_merge($result->toArray(), [
+            'points_earned' => $scored['points_earned'],
+            'points_max' => $scored['points_max'],
+            'pending_review' => $scored['pending_review'],
+        ]), 201, [
             'Location' => '/api/quizzes/' . $result->id
         ]);
     }

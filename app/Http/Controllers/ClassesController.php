@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Classes;
 use App\Models\Courses;
+use App\Models\Quizzes;
 use Illuminate\Http\Request;
 
 class ClassesController extends Controller
@@ -27,7 +28,7 @@ class ClassesController extends Controller
         $query->orderBy('id', 'desc');
 
         $total = $query->count();
-        $items = $query->skip($page * $size)->take($size)->get();
+        $items = $this->withoutInactiveQuizMaterials($query->skip($page * $size)->take($size)->get());
 
         return response()->json($this->formatPage($items, $total, $page, $size));
     }
@@ -41,6 +42,29 @@ class ClassesController extends Controller
         if (!$class) {
             return response()->json(null, 404);
         }
-        return response()->json($class);
+        return response()->json($this->withoutInactiveQuizMaterials(collect([$class]))->first());
+    }
+
+    /**
+     * Drop the quiz entry from a class's materials when that class has no
+     * active quiz, so students don't see a quiz an admin has deactivated.
+     */
+    private function withoutInactiveQuizMaterials($classes)
+    {
+        $classIdsWithActiveQuiz = Quizzes::active()
+            ->whereIn('class_id', $classes->pluck('id'))
+            ->pluck('class_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return $classes->each(function (Classes $class) use ($classIdsWithActiveQuiz) {
+            if (in_array((int) $class->id, $classIdsWithActiveQuiz, true) || !is_array($class->materials)) {
+                return;
+            }
+            $class->materials = array_values(array_filter(
+                $class->materials,
+                fn ($material) => !is_array($material) || ($material['type'] ?? null) !== 'quiz'
+            ));
+        });
     }
 }
