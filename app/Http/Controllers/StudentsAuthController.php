@@ -39,6 +39,13 @@ class StudentsAuthController extends Controller
             return response()->json(['error' => 'Invalid email or password'], 401);
         }
 
+        if ($student->is_active === false) {
+            return response()->json([
+                'error' => 'This account is inactive. Please contact your teacher.',
+                'code' => 'account_inactive',
+            ], 403);
+        }
+
         if (!$passwordIsModernHash) {
             $student->password = password_hash($password, PASSWORD_DEFAULT);
             $student->save();
@@ -78,6 +85,9 @@ class StudentsAuthController extends Controller
                 if ($tenantId !== null) $studentQuery->where('tenant_id', $tenantId);
                 if (!empty($payload['tenant_id'])) $studentQuery->where('tenant_id', $payload['tenant_id']);
                 $student = $studentQuery->first();
+                if ($student && $student->is_active === false) {
+                    return response()->json(['error' => 'This account is inactive.', 'code' => 'account_inactive'], 403);
+                }
                 if ($student) {
                     return response()->json([
                         'id' => $student->id,

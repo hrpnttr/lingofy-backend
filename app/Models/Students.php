@@ -37,6 +37,7 @@ class Students extends Model
      */
     protected $casts = [
         'createdAt' => 'datetime',
+        'is_active' => 'boolean',
     ];
 
     public $timestamps = true;

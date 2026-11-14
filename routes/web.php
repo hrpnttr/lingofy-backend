@@ -16,7 +16,7 @@
 // Root Hello check
 $router->get('/', 'HelloController@hello');
 
-$router->group(['prefix' => 'api'], function () use ($router) {
+$router->group(['prefix' => 'api', 'middleware' => 'service'], function () use ($router) {
 
     // Users CRUD
     $router->post('users', 'UserController@create');
@@ -44,6 +44,7 @@ $router->group(['prefix' => 'api'], function () use ($router) {
 
     // Quiz Results (Add Quizzes)
     $router->get('add-quizzes', 'QuizResultController@list');
+    $router->get('add-quizzes/attempt-status', 'QuizResultController@attemptStatus');
     $router->get('add-quizzes/{id}', 'QuizResultController@get');
     $router->post('add-quizzes', 'QuizResultController@create');
 

@@ -28,6 +28,7 @@ class QuizzResult extends Model
     protected $casts = [
         'answers' => 'array',
         'score' => 'integer',
+        'reopened_at' => 'datetime',
         'createdAt' => 'datetime',
         'updatedAt' => 'datetime',
     ];

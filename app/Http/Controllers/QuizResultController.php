@@ -7,6 +7,7 @@ use App\Models\Students;
 use App\Models\Quizzes;
 use App\Support\QuizScorer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class QuizResultController extends Controller
 {
@@ -36,6 +37,59 @@ class QuizResultController extends Controller
             return response()->json(null, 404);
         }
         return response()->json($result);
+    }
+
+    /**
+     * Whether the student may still take this quiz. Class quizzes allow one
+     * submission until a teacher reopens it; placement tests are unlimited.
+     */
+    public function attemptStatus(Request $request)
+    {
+        $this->validate($request, [
+            'studentId' => 'required',
+            'quiz_id' => 'required',
+        ]);
+
+        $tenantId = $this->tenantId($request);
+        $quizQuery = Quizzes::where('id', $request->input('quiz_id'));
+        if ($tenantId !== null) $quizQuery->where('tenant_id', $tenantId);
+        $quiz = $quizQuery->first();
+        if (!$quiz) {
+            return response()->json(['message' => 'Quiz not found.'], 404);
+        }
+
+        $lockingResult = $this->lockingResult($request->input('studentId'), $quiz);
+
+        return response()->json([
+            'single_attempt' => $quiz->class_id !== null,
+            'submitted' => $lockingResult !== null,
+            'result' => $lockingResult ? [
+                'id' => $lockingResult->id,
+                'score' => $lockingResult->score,
+                'submitted_at' => $lockingResult->createdAt ? $lockingResult->createdAt->toIso8601String() : null,
+            ] : null,
+        ]);
+    }
+
+    private function lockingResult($studentId, Quizzes $quiz): ?QuizzResult
+    {
+        if ($quiz->class_id === null) {
+            return null;
+        }
+
+        return QuizzResult::where('studentId', $studentId)
+            ->where('quiz_id', $quiz->id)
+            ->whereNull('reopened_at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function alreadySubmittedResponse()
+    {
+        return response()->json([
+            'message' => 'You have already submitted this quiz. Ask your teacher to reopen it if you need another attempt.',
+            'code' => 'quiz_already_submitted',
+        ], 409);
     }
 
     public function create(Request $request)
@@ -72,12 +126,23 @@ class QuizResultController extends Controller
             ];
         }
 
-        $result = QuizzResult::create([
-            'studentId' => $request->input('studentId'),
-            'quiz_id' => $request->input('quiz_id'),
-            'answers' => $mappedAnswers,
-            'score' => $request->input('score'),
-        ]);
+        $quiz = Quizzes::find($request->input('quiz_id'));
+        $result = DB::transaction(function () use ($request, $quiz, $mappedAnswers) {
+            Students::where('id', $request->input('studentId'))->lockForUpdate()->first();
+            if ($this->lockingResult($request->input('studentId'), $quiz)) {
+                return null;
+            }
+
+            return QuizzResult::create([
+                'studentId' => $request->input('studentId'),
+                'quiz_id' => $request->input('quiz_id'),
+                'answers' => $mappedAnswers,
+                'score' => $request->input('score'),
+            ]);
+        });
+        if ($result === null) {
+            return $this->alreadySubmittedResponse();
+        }
 
         return response()->json($result, 201, [
             'Location' => '/api/quizzes/' . $result->id
@@ -112,6 +177,10 @@ class QuizResultController extends Controller
             return response()->json(['message' => 'Student or quiz not found in this organization.'], 404);
         }
 
+        if ($this->lockingResult($studentId, $quiz)) {
+            return $this->alreadySubmittedResponse();
+        }
+
         $questions = is_array($quiz->contens) ? array_values($quiz->contens) : [];
         if (count($questions) === 0) {
             return response()->json(['message' => 'This quiz has no questions.'], 422);
@@ -127,12 +196,23 @@ class QuizResultController extends Controller
 
         $scored = QuizScorer::score($questions, $values);
 
-        $result = QuizzResult::create([
-            'studentId' => $studentId,
-            'quiz_id' => $quizId,
-            'answers' => $scored['answers'],
-            'score' => $scored['score'],
-        ]);
+        // Lock the student row so two simultaneous submissions cannot both pass the check.
+        $result = DB::transaction(function () use ($studentId, $quizId, $quiz, $scored) {
+            Students::where('id', $studentId)->lockForUpdate()->first();
+            if ($this->lockingResult($studentId, $quiz)) {
+                return null;
+            }
+
+            return QuizzResult::create([
+                'studentId' => $studentId,
+                'quiz_id' => $quizId,
+                'answers' => $scored['answers'],
+                'score' => $scored['score'],
+            ]);
+        });
+        if ($result === null) {
+            return $this->alreadySubmittedResponse();
+        }
 
         return response()->json(array_merge($result->toArray(), [
             'points_earned' => $scored['points_earned'],
